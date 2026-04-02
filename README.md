@@ -36,8 +36,8 @@ Es una metáfora de la **Gestión del Cambio**: la tecnología no debe ser una b
 
 ## 🚀 Cómo Jugar
 
-1.  Clona este repo: `git clone https://github.com/coronelguillermo85-art/atskombat.git`
-2.  Abrí `ats_kombat.html` en tu navegador.
+1.  Clona este repo: `git clone https://github.com/coronelguillermo85-art/atskombat.git` o en  
+2.  Abrí `ats_kombat.html` en tu navegadoro en https://atskombat.vercel.app/
 3.  Vence al Bot y conseguí el laburo.
 4.  <img width="1536" height="1024" alt="atskombat" src="https://github.com/user-attachments/assets/03bb3fd8-b864-4881-93ac-64c99ab76e39" />
 
