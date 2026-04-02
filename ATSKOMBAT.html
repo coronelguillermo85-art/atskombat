@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ATS KOMBAT ULTRA</title>
+  <style>
+    :root {
+      --bg1: #1a1030;
+      --bg2: #0b0b17;
+      --cyan: #53e5ff;
+      --gold: #ffd34d;
+      --green: #50fa7b;
+      --red: #ff5470;
+      --white: #f3f7ff;
+      --panel: rgba(5, 8, 18, 0.78);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at top, #26154a 0%, #0c0d19 50%, #06060d 100%);
+      color: var(--white);
+      font-family: monospace;
+    }
+    .wrap { width: min(98vw, 1080px); padding: 12px; }
+    h1 {
+      margin: 0 0 6px;
+      text-align: center;
+      font-size: clamp(28px, 4vw, 44px);
+      color: var(--gold);
+      letter-spacing: 2px;
+      text-shadow: 0 0 14px rgba(255,211,77,.25);
+    }
+    .sub {
+      text-align: center;
+      color: #c7d8ff;
+      margin-bottom: 10px;
+      font-size: 14px;
+    }
+    canvas {
+      width: 100%;
+      height: auto;
+      display: block;
+      border: 4px solid var(--cyan);
+      border-radius: 14px;
+      image-rendering: pixelated;
+      background: linear-gradient(#26154a, #0d1120 72%);
+      box-shadow: 0 0 28px rgba(83,229,255,.14), inset 0 0 0 6px rgba(0,0,0,.35);
+    }
+    .controls {
+      margin-top: 10px;
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    button {
+      background: #10243a;
+      color: var(--white);
+      border: 2px solid var(--cyan);
+      border-radius: 10px;
+      padding: 10px 16px;
+      font: inherit;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button:hover { filter: brightness(1.08); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>⚔️ ATS KOMBAT ULTRA</h1>
+    <div class="sub">Guillermo vs ATS Bot — 16 bit, arcade y con pelea de verdad</div>
+    <canvas id="game" width="1000" height="620"></canvas>
+    <div class="controls">
+      <button id="startBtn">▶ Iniciar</button>
+      <button id="restartBtn">↺ Reiniciar</button>
+      <button id="cvBtn">📄 Ver mi CV</button>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width;
+    const H = canvas.height;
+    const FLOOR = 510;
+    const CV_LINK = 'https://drive.google.com/file/d/1LsgIr-vuDw0FUowzPHhzODw-TPC_MqPa/preview';
+    const ROUND_MAX = 60 * 40;
+
+    const keys = {};
+    let running = false;
+    let gameOver = false;
+    let winner = '';
+    let timer = ROUND_MAX;
+    let frame = 0;
+    let shake = 0;
+    let introTimer = 140;
+    let koTimer = 0;
+    let skyScroll = 0;
+    const particles = [];
+    const texts = [];
+    const projectiles = [];
+
+    function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+    function rand(min, max) { return Math.random() * (max - min) + min; }
+    function rectHit(a, b) {
+      return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+    }
+
+    const player = {
+      name: 'GUILLERMO', x: 160, y: FLOOR - 116, w: 76, h: 116,
+      vx: 0, vy: 0, speed: 4.4, jump: -15, onGround: true, facing: 1,
+      hp: 100, maxHp: 100, attackCd: 0, specialCd: 0, hitStun: 0, invuln: 0,
+      punchAnim: 0, kickAnim: 0, specialAnim: 0, walkFrame: 0
+    };
+
+    const enemy = {
+      name: 'ATS BOT', x: 760, y: FLOOR - 116, w: 76, h: 116,
+      vx: 0, vy: 0, speed: 2.6, jump: -14, onGround: true, facing: -1,
+      hp: 100, maxHp: 100, attackCd: 0, specialCd: 0, hitStun: 0, invuln: 0,
+      punchAnim: 0, kickAnim: 0, specialAnim: 0, walkFrame: 0, aiTick: 0
+    };
+
+    function resetGame() {
+      running = false;
+      gameOver = false;
+      winner = '';
+      timer = ROUND_MAX;
+      frame = 0;
+      shake = 0;
+      introTimer = 140;
+      koTimer = 0;
+      skyScroll = 0;
+      particles.length = 0;
+      texts.length = 0;
+      projectiles.length = 0;
+      Object.assign(player, {
+        x: 160, y: FLOOR - 116, vx: 0, vy: 0, onGround: true, facing: 1,
+        hp: 100, attackCd: 0, specialCd: 0, hitStun: 0, invuln: 0,
+        punchAnim: 0, kickAnim: 0, specialAnim: 0, walkFrame: 0
+      });
+      Object.assign(enemy, {
+        x: 760, y: FLOOR - 116, vx: 0, vy: 0, onGround: true, facing: -1,
+        hp: 100, attackCd: 0, specialCd: 0, hitStun: 0, invuln: 0,
+        punchAnim: 0, kickAnim: 0, specialAnim: 0, walkFrame: 0, aiTick: 0
+      });
+      draw();
+    }
+
+    function startGame() {
+      if (running || gameOver) return;
+      running = true;
+      if (introTimer < 20) introTimer = 100;
+      loop();
+    }
+
+    function openCV() {
+      window.open(CV_LINK, '_blank', 'noopener,noreferrer');
+    }
+
+    function addText(text, x, y, color = '#fff', size = 18) {
+      texts.push({ text, x, y, color, life: 46, size });
+    }
+
+    function burst(x, y, color, count = 14) {
+      for (let i = 0; i < count; i++) {
+        particles.push({ x, y, vx: rand(-3.2, 3.2), vy: rand(-4.2, -1), life: rand(16, 34), color });
+      }
+    }
+
+    function hurt(target, from, dmg, label, color) {
+      if (target.invuln > 0) return;
+      target.hp = clamp(target.hp - dmg, 0, target.maxHp);
+      target.hitStun = 12;
+      target.invuln = 18;
+      target.vx = from.facing * 4.5;
+      burst(target.x + target.w / 2, target.y + 40, color, 14);
+      addText(label, target.x - 4, target.y - 10, color, 16);
+      shake = 10;
+      if (target.hp <= 0 && !gameOver) {
+        koTimer = 140;
+        gameOver = true;
+        running = false;
+        winner = target === player ? enemy.name : player.name;
+      }
+    }
+
+    function meleeHitbox(f, type) {
+      if (type === 'punch') {
+        return { x: f.facing === 1 ? f.x + f.w - 8 : f.x - 26, y: f.y + 30, w: 26, h: 24 };
+      }
+      return { x: f.facing === 1 ? f.x + f.w - 6 : f.x - 34, y: f.y + 62, w: 34, h: 18 };
+    }
+
+    function doPunch(attacker, defender) {
+      if (attacker.attackCd > 0 || attacker.hitStun > 0) return;
+      attacker.attackCd = 18;
+      attacker.punchAnim = 7;
+      const hb = meleeHitbox(attacker, 'punch');
+      const target = { x: defender.x, y: defender.y, w: defender.w, h: defender.h };
+      if (rectHit(hb, target)) {
+        hurt(defender, attacker, 9, attacker === player ? 'CV HIT' : 'REJECT', attacker === player ? '#50fa7b' : '#ff5470');
+      }
+    }
+
+    function doKick(attacker, defender) {
+      if (attacker.attackCd > 0 || attacker.hitStun > 0) return;
+      attacker.attackCd = 26;
+      attacker.kickAnim = 9;
+      const hb = meleeHitbox(attacker, 'kick');
+      const target = { x: defender.x, y: defender.y, w: defender.w, h: defender.h };
+      if (rectHit(hb, target)) {
+        hurt(defender, attacker, 14, attacker === player ? 'STACK KICK' : 'FILTER KICK', attacker === player ? '#53e5ff' : '#ff5470');
+      }
+    }
+
+    function doSpecial(attacker) {
+      if (attacker.specialCd > 0 || attacker.hitStun > 0) return;
+      attacker.specialCd = 80;
+      attacker.specialAnim = 12;
+      projectiles.push({
+        owner: attacker === player ? 'player' : 'enemy',
+        type: attacker === player ? 'cv' : 'filter',
+        x: attacker.facing === 1 ? attacker.x + attacker.w : attacker.x - 18,
+        y: attacker.y + 42,
+        w: 20, h: 12,
+        vx: attacker.facing * (attacker === player ? 9 : 7),
+        spin: 0
+      });
+      addText(attacker === player ? 'CV ATTACK' : 'KEYWORD FILTER', attacker.x - 10, attacker.y - 16, attacker === player ? '#53e5ff' : '#ff5470', 16);
+    }
+
+    function updateFighter(f) {
+      f.vy += 0.76;
+      f.y += f.vy;
+      if (f.y >= FLOOR - f.h) {
+        f.y = FLOOR - f.h;
+        f.vy = 0;
+        f.onGround = true;
+      }
+      f.x += f.vx;
+      f.vx *= 0.84;
+      f.x = clamp(f.x, 40, W - 116);
+      if (f.attackCd > 0) f.attackCd--;
+      if (f.specialCd > 0) f.specialCd--;
+      if (f.hitStun > 0) f.hitStun--;
+      if (f.invuln > 0) f.invuln--;
+      if (f.punchAnim > 0) f.punchAnim--;
+      if (f.kickAnim > 0) f.kickAnim--;
+      if (f.specialAnim > 0) f.specialAnim--;
+    }
+
+    function updatePlayer() {
+      if (player.hitStun <= 0) {
+        const move = (keys['ArrowRight'] ? 1 : 0) - (keys['ArrowLeft'] ? 1 : 0);
+        player.x += move * player.speed;
+        if (move !== 0) player.facing = move;
+        if ((keys['ArrowUp'] || keys[' ']) && player.onGround) {
+          player.vy = player.jump;
+          player.onGround = false;
+        }
+        if (Math.abs(move) > 0) player.walkFrame += 0.24;
+      }
+      updateFighter(player);
+    }
+
+    function updateEnemy() {
+      if (enemy.hitStun <= 0) {
+        const dx = player.x - enemy.x;
+        const dist = Math.abs(dx);
+        enemy.facing = dx < 0 ? -1 : 1;
+        if (dist > 110) {
+          enemy.x += enemy.facing * enemy.speed;
+          enemy.walkFrame += 0.16;
+        } else if (dist < 72) {
+          enemy.x -= enemy.facing * enemy.speed * 0.7;
+        }
+        if (enemy.onGround && Math.random() < 0.003 && dist > 110) {
+          enemy.vy = enemy.jump;
+          enemy.onGround = false;
+        }
+        if (dist < 76 && enemy.attackCd <= 0 && Math.random() < 0.09) {
+          Math.random() < 0.55 ? doPunch(enemy, player) : doKick(enemy, player);
+        } else if (dist > 96 && enemy.specialCd <= 0 && Math.random() < 0.025) {
+          doSpecial(enemy);
+        }
+      }
+      updateFighter(enemy);
+    }
+
+    function updateProjectiles() {
+      for (let i = projectiles.length - 1; i >= 0; i--) {
+        const p = projectiles[i];
+        p.x += p.vx;
+        p.spin += 0.24;
+        if (p.x < -30 || p.x > W + 30) {
+          projectiles.splice(i, 1);
+          continue;
+        }
+        const target = p.owner === 'player'
+          ? { x: enemy.x, y: enemy.y, w: enemy.w, h: enemy.h }
+          : { x: player.x, y: player.y, w: player.w, h: player.h };
+        if (rectHit(p, target)) {
+          if (p.owner === 'player') hurt(enemy, player, 13, 'STACK COMBO', '#53e5ff');
+          else hurt(player, enemy, 12, 'ATS FILTER', '#ff5470');
+          projectiles.splice(i, 1);
+        }
+      }
+    }
+
+    function updateEffects() {
+      for (let i = texts.length - 1; i >= 0; i--) {
+        texts[i].y -= 0.6;
+        texts[i].life--;
+        if (texts[i].life <= 0) texts.splice(i, 1);
+      }
+      for (let i = particles.length - 1; i >= 0; i--) {
+        particles[i].x += particles[i].vx;
+        particles[i].y += particles[i].vy;
+        particles[i].vy += 0.15;
+        particles[i].life--;
+        if (particles[i].life <= 0) particles.splice(i, 1);
+      }
+      if (shake > 0) shake *= 0.82;
+      if (introTimer > 0 && !running) introTimer--;
+      if (koTimer > 0) koTimer--;
+    }
+
+    function finishByTime() {
+      gameOver = true;
+      running = false;
+      if (player.hp === enemy.hp) winner = 'EMPATE';
+      else winner = player.hp > enemy.hp ? player.name : enemy.name;
+      koTimer = 120;
+    }
+
+    function updateGame() {
+      frame++;
+      skyScroll += 0.5;
+      timer--;
+      if (timer <= 0) {
+        finishByTime();
+        return;
+      }
+      updatePlayer();
+      updateEnemy();
+      updateProjectiles();
+      updateEffects();
+    }
+
+    function drawBackground() {
+      const grad = ctx.createLinearGradient(0, 0, 0, FLOOR);
+      grad.addColorStop(0, '#2b174f');
+      grad.addColorStop(0.6, '#101425');
+      grad.addColorStop(1, '#0b0b15');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, FLOOR);
+
+      ctx.fillStyle = '#ffd34d';
+      ctx.fillRect(720, 74, 60, 60);
+      ctx.fillStyle = '#2b174f';
+      ctx.fillRect(738, 74, 60, 60);
+
+      for (let i = 0; i < 12; i++) {
+        const bw = 44 + (i % 3) * 18;
+        const bh = 130 + (i * 41 % 170);
+        const bx = (i * 92 - skyScroll * 0.7) % (W + 130) - 100;
+        const by = FLOOR - bh;
+        ctx.fillStyle = i % 2 ? '#1b2a47' : '#22355a';
+        ctx.fillRect(bx, by, bw, bh);
+        for (let wx = 6; wx < bw - 6; wx += 12) {
+          for (let wy = 10; wy < bh - 10; wy += 14) {
+            ctx.fillStyle = ((wx + wy + i) % 5 === 0) ? '#ffd34d' : '#30496c';
+            ctx.fillRect(bx + wx, by + wy, 6, 8);
+          }
+        }
+      }
+
+      ctx.fillStyle = '#241a14';
+      ctx.fillRect(0, FLOOR, W, H - FLOOR);
+      ctx.fillStyle = '#6b4127';
+      ctx.fillRect(0, FLOOR + 4, W, 20);
+      ctx.fillStyle = '#53e5ff';
+      ctx.fillRect(0, FLOOR, W, 4);
+    }
+
+    function drawHealth(label, x, y, hp, maxHp, color, alignRight = false) {
+      const barW = 300;
+      ctx.fillStyle = 'rgba(5,8,18,.86)';
+      ctx.fillRect(x, y, barW, 26);
+      ctx.strokeStyle = color;
+      ctx.strokeRect(x, y, barW, 26);
+      ctx.fillStyle = color;
+      const fill = (barW - 4) * hp / maxHp;
+      if (alignRight) ctx.fillRect(x + barW - 2 - fill, y + 2, fill, 22);
+      else ctx.fillRect(x + 2, y + 2, fill, 22);
+      ctx.fillStyle = '#f3f7ff';
+      ctx.font = 'bold 16px monospace';
+      ctx.fillText(label, x, y - 8);
+    }
+
+    function drawHUD() {
+      ctx.fillStyle = 'rgba(5,8,18,.84)';
+      ctx.fillRect(0, 0, W, 74);
+      ctx.strokeStyle = '#53e5ff';
+      ctx.strokeRect(0, 0, W, 74);
+      drawHealth('GUILLERMO', 24, 26, player.hp, player.maxHp, '#50fa7b', false);
+      drawHealth('ATS BOT', 676, 26, enemy.hp, enemy.maxHp, '#ff5470', true);
+      ctx.fillStyle = '#ffd34d';
+      ctx.font = 'bold 26px monospace';
+      ctx.fillText(String(Math.ceil(timer / 60)).padStart(2, '0'), W / 2 - 18, 44);
+      ctx.fillStyle = '#cfe3ff';
+      ctx.font = '14px monospace';
+      ctx.fillText('Z PUÑO', W / 2 - 170, 66);
+      ctx.fillText('C PATADA', W / 2 - 70, 66);
+      ctx.fillText('X CV ATTACK', W / 2 + 30, 66);
+      ctx.fillText('↑ SALTAR', W / 2 + 170, 66);
+    }
+
+    function drawGuillermo(x, y, facing, f) {
+      ctx.save();
+      if (facing === -1) {
+        ctx.translate(x + 76, 0);
+        ctx.scale(-1, 1);
+        x = 0;
+      }
+      if (f.invuln > 0 && Math.floor(f.invuln / 3) % 2 === 0) { ctx.restore(); return; }
+      const step = Math.sin(f.walkFrame) * 4;
+      const punch = f.punchAnim > 0 ? 14 : 0;
+      const kick = f.kickAnim > 0 ? 10 : 0;
+      const special = f.specialAnim > 0 ? 6 : 0;
+
+      ctx.fillStyle = '#18110d';
+      ctx.fillRect(x + 18, y + 2, 30, 10); // hair
+      ctx.fillRect(x + 20, y + 20, 20, 6); // beard
+      ctx.fillStyle = '#c79a74';
+      ctx.fillRect(x + 20, y + 10, 26, 16); // face
+      ctx.fillStyle = '#0c0c0c';
+      ctx.fillRect(x + 37, y + 16, 3, 3); // eye
+
+      ctx.fillStyle = special ? '#53e5ff' : '#111827';
+      ctx.fillRect(x + 16, y + 28, 40, 36); // torso
+      ctx.fillStyle = '#f3f7ff';
+      ctx.fillRect(x + 30, y + 30, 12, 16); // shirt
+      ctx.fillStyle = '#22c1ff';
+      ctx.fillRect(x + 34, y + 42, 4, 16); // tie
+
+      ctx.fillStyle = '#111827';
+      ctx.fillRect(x + 8, y + 34, 12, 18); // back arm
+      ctx.fillRect(x + 56, y + 34 - (punch ? 8 : 0), 12 + punch, 18); // front arm punch
+
+      ctx.fillStyle = '#1d4ed8';
+      ctx.fillRect(x + 20, y + 64 + step, 12, 28); // leg 1
+      ctx.fillRect(x + 42, y + 64 - step, 12 + kick, 28); // leg 2 kick
+      ctx.fillStyle = '#9ca3af';
+      ctx.fillRect(x + 18, y + 90 + step, 16, 8);
+      ctx.fillRect(x + 42, y + 90 - step, 16 + kick, 8);
+      ctx.restore();
+    }
+
+    function drawATS(x, y, facing, f) {
+      ctx.save();
+      if (facing === -1) {
+        ctx.translate(x + 76, 0);
+        ctx.scale(-1, 1);
+        x = 0;
+      }
+      if (f.invuln > 0 && Math.floor(f.invuln / 3) % 2 === 0) { ctx.restore(); return; }
+      const step = Math.sin(f.walkFrame) * 3.5;
+      const punch = f.punchAnim > 0 ? 14 : 0;
+      const kick = f.kickAnim > 0 ? 10 : 0;
+      const special = f.specialAnim > 0 ? 6 : 0;
+
+      ctx.fillStyle = '#93a6bb';
+      ctx.fillRect(x + 18, y + 8, 34, 18); // robot head
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(x + 24, y + 14, 6, 4);
+      ctx.fillRect(x + 40, y + 14, 6, 4);
+      ctx.fillStyle = special ? '#ff5470' : '#334155';
+      ctx.fillRect(x + 14, y + 28, 44, 36); // torso
+      ctx.fillStyle = '#e5e7eb';
+      ctx.fillRect(x + 30, y + 32, 12, 14); // shirt plate
+      ctx.fillStyle = '#ff5470';
+      ctx.fillRect(x + 34, y + 42, 4, 14); // tie
+
+      ctx.fillStyle = '#64748b';
+      ctx.fillRect(x + 6, y + 34, 12, 18);
+      ctx.fillRect(x + 58, y + 34 - (punch ? 8 : 0), 12 + punch, 18);
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(x + 18, y + 64 + step, 12, 28);
+      ctx.fillRect(x + 42, y + 64 - step, 12 + kick, 28);
+      ctx.fillStyle = '#cbd5e1';
+      ctx.fillRect(x + 16, y + 90 + step, 16, 8);
+      ctx.fillRect(x + 42, y + 90 - step, 16 + kick, 8);
+      ctx.restore();
+    }
+
+    function drawProjectile(p) {
+      ctx.save();
+      ctx.translate(p.x + p.w / 2, p.y + p.h / 2);
+      ctx.rotate(p.spin);
+      if (p.type === 'cv') {
+        ctx.fillStyle = '#eff6ff';
+        ctx.fillRect(-10, -6, 20, 12);
+        ctx.fillStyle = '#53e5ff';
+        ctx.fillRect(-10, -6, 20, 3);
+      } else {
+        ctx.fillStyle = '#ffd4dc';
+        ctx.fillRect(-10, -6, 20, 12);
+        ctx.fillStyle = '#ff5470';
+        ctx.fillRect(-10, -6, 20, 3);
+      }
+      ctx.restore();
+    }
+
+    function drawEffects() {
+      for (const p of particles) {
+        ctx.globalAlpha = p.life / 34;
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x, p.y, 4, 4);
+      }
+      for (const t of texts) {
+        ctx.globalAlpha = t.life / 46;
+        ctx.fillStyle = t.color;
+        ctx.font = 'bold ' + t.size + 'px monospace';
+        ctx.fillText(t.text, t.x, t.y);
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function drawIntro() {
+      if (running || gameOver) return;
+      ctx.fillStyle = 'rgba(5,8,18,.88)';
+      ctx.fillRect(160, 120, 680, 320);
+      ctx.strokeStyle = '#ffd34d';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(160, 120, 680, 320);
+      ctx.fillStyle = '#ffd34d';
+      ctx.font = 'bold 46px monospace';
+      const title = 'ATS KOMBAT';
+      ctx.fillText(title, W / 2 - ctx.measureText(title).width / 2, 190);
+      ctx.fillStyle = '#f3f7ff';
+      ctx.font = '20px monospace';
+      ctx.fillText('Guillermo vs ATS Bot', W / 2 - 120, 235);
+      ctx.fillText('← → mover · ↑ saltar · Z puño · C patada · X especial', W / 2 - 280, 285);
+      ctx.fillText('Esta vez sí hay pelea real.', W / 2 - 145, 325);
+      ctx.fillStyle = '#53e5ff';
+      ctx.font = 'bold 24px monospace';
+      ctx.fillText('▶ CLICK EN INICIAR', W / 2 - 120, 390);
+    }
+
+    function drawKO() {
+      if (!gameOver) return;
+      ctx.fillStyle = 'rgba(5,8,18,.9)';
+      ctx.fillRect(170, 135, 660, 280);
+      ctx.strokeStyle = winner === player.name ? '#50fa7b' : winner === enemy.name ? '#ff5470' : '#ffd34d';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(170, 135, 660, 280);
+      const big = winner === player.name ? 'HIRED' : winner === enemy.name ? 'REJECTED' : 'DRAW';
+      ctx.fillStyle = winner === player.name ? '#50fa7b' : winner === enemy.name ? '#ff5470' : '#ffd34d';
+      ctx.font = 'bold 52px monospace';
+      ctx.fillText(big, W / 2 - ctx.measureText(big).width / 2, 215);
+      ctx.fillStyle = '#f3f7ff';
+      ctx.font = '22px monospace';
+      const sub = winner === player.name ? 'Le ganaste al ATS. Mirá mi CV.' : winner === enemy.name ? 'El sistema ganó esta ronda.' : 'Empate técnico.';
+      ctx.fillText(sub, W / 2 - ctx.measureText(sub).width / 2, 275);
+      ctx.fillText('Reiniciá o abrí el CV abajo.', W / 2 - 165, 330);
+    }
+
+    function draw() {
+      const ox = shake ? (Math.random() - 0.5) * shake : 0;
+      const oy = shake ? (Math.random() - 0.5) * shake : 0;
+      ctx.save();
+      ctx.translate(ox, oy);
+      ctx.clearRect(-20, -20, W + 40, H + 40);
+      drawBackground();
+      drawGuillermo(player.x, player.y, player.facing, player);
+      drawATS(enemy.x, enemy.y, enemy.facing, enemy);
+      for (const p of projectiles) drawProjectile(p);
+      drawEffects();
+      drawHUD();
+      drawIntro();
+      drawKO();
+      ctx.restore();
+    }
+
+    function loop() {
+      if (!running) {
+        updateEffects();
+        draw();
+        return;
+      }
+      updateGame();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    document.addEventListener('keydown', (e) => {
+      keys[e.key] = true;
+      if (!running && !gameOver && e.key === 'Enter') startGame();
+      if (running) {
+        if (e.key === 'z' || e.key === 'Z') { doPunch(player, enemy); e.preventDefault(); }
+        if (e.key === 'c' || e.key === 'C') { doKick(player, enemy); e.preventDefault(); }
+        if (e.key === 'x' || e.key === 'X') { doSpecial(player); e.preventDefault(); }
+      }
+      if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' ','z','Z','x','X','c','C'].includes(e.key)) e.preventDefault();
+    });
+
+    document.addEventListener('keyup', (e) => { keys[e.key] = false; });
+    document.getElementById('startBtn').addEventListener('click', startGame);
+    document.getElementById('restartBtn').addEventListener('click', resetGame);
+    document.getElementById('cvBtn').addEventListener('click', openCV);
+
+    resetGame();
+  </script>
+</body>
+</html>
